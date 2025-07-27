@@ -36,16 +36,23 @@ public with sharing class DummyJSONCallout {
 
 	public static void getDummyJSONUserFromId(String dummyUserId) {
 		// Create HTTP request to send.
-
+		HttpRequest request = new HttpRequest();
 		// Set the endpoint URL. Use direct URL or for best practices use Named Credential.
-
+		request.setEndpoint('https://dummyjson.com/users/' + dummyUserId);
 		// Set the HTTP method to GET.
-
+		request.setMethod('GET');
 		// Send the HTTP request and get the response.
+		Http http = new Http();
+		HttpResponse response = http.send(request);
+		System.debug(response.getBody());
+		System.debug(response.getStatusCode());
+		System.debug(response.getStatus());
 
 		// If the HTTP response code is successful, parse the JSON response and update the contact.
-		Contact cont = null;
-		upsert cont DummyJSON_Id__c; //insert/update from the JSON response using the external id (dummyUserId)
+		if (response.getStatusCode() >= 200 && response.getStatusCode() <= 299) {
+			Contact cont = createContactFromJson(response.getBody());
+			Database.upsert(cont, Contact.DummyJSON_Id__c); //insert/update from the JSON response using the external id (dummyUserId)
+		}
 	}
 
 	/* 
@@ -66,16 +73,30 @@ public with sharing class DummyJSONCallout {
 	@TestVisible // Allows test class to see this method. Since it is private, it would not be visible otherwise.
 	private static Contact createContactFromJson(String jsonResponse) {
 		// Deserialize the JSON string into map of primitive data types.
-
+		Map<String, Object> jsonMap = (Map<String, Object>) JSON.deserializeUntyped(jsonResponse);
+		System.debug(jsonMap);
 		// Create a new contact from the JSON response.
-
+		Contact cont = new Contact();
 		// Set the contact fields from the JSON response.
-
+		cont.FirstName = (String) jsonMap.get('firstName');
+		cont.LastName = (String) jsonMap.get('lastName');
+		cont.Email = (String) jsonMap.get('email');
+		cont.Birthdate = Date.valueOf((String) jsonMap.get('birthDate'));
+		cont.Phone = (String) jsonMap.get('phone');
+		cont.DummyJSON_Id__c = String.valueOf(jsonMap.get('id'));
+		cont.DummyJSON_Last_Updated__c = DateTime.now();
 		// Deserialize the address from the JSON response.
+		Map<String, Object> addressMap = (Map<String, Object>) jsonMap.get('address');
+		System.debug(addressMap);
 
 		// Set the address fields on the contact.
+		cont.MailingStreet = (String) addressMap.get('address');
+		cont.MailingCity = (String) addressMap.get('city');
+		cont.MailingState = (String) addressMap.get('state');
+		cont.MailingPostalCode = (String) addressMap.get('postalCode');
+		cont.MailingCountry = (String) addressMap.get('country');
 
-		return null;
+		return cont;
 	}
 
 	/* 
