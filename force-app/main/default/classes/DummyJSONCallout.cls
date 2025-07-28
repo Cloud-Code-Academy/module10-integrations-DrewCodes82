@@ -38,13 +38,16 @@ public with sharing class DummyJSONCallout {
 		// Create HTTP request to send.
 		HttpRequest request = new HttpRequest();
 		// Set the endpoint URL. Use direct URL or for best practices use Named Credential.
-		request.setEndpoint('https://dummyjson.com/users/' + dummyUserId);
+		request.setEndpoint('callout:DummyJsonUser' + '/' +dummyUserId);
 		// Set the HTTP method to GET.
 		request.setMethod('GET');
 		// Send the HTTP request and get the response.
 		Http http = new Http();
 		try {
 			HttpResponse response = http.send(request);
+			System.debug(response.getBody());
+			System.debug(response.getStatusCode());
+			System.debug(response.getStatus());
 
 			// If the HTTP response code is successful, parse the JSON response and update the contact.
 			if (response.getStatusCode() >= 200 && response.getStatusCode() <= 299) {
@@ -121,16 +124,44 @@ public with sharing class DummyJSONCallout {
 	
 	public static void postCreateDummyJSONUser(String contactId) {
 		// Create HTTP request to send.
+		HttpRequest request = new HttpRequest();
 
 		// Set the endpoint URL. Use direct URL or for best practices use Named Credential.
+		request.setEndpoint('callout:DummyJsonUser' + '/add');
 
 		// Set the HTTP method to POST.
+		request.setMethod('POST');
+		// request.setHeader('Content-Type', 'application/json'); // Set in Named Credential
 
 		// Set the body using generateDummyJsonUserPayload method.
+		request.setBody(generateDummyJsonUserPayload(contactId));
 
 		// Send the HTTP request and get the response.
+		Http http = new Http();
+		try {
+			HttpResponse response = http.send(request);
+			System.debug(response.getBody());
+			System.debug(response.getStatusCode());
+			System.debug(response.getStatus());
 
-		// If the HTTP response code is successful, update the contact.
+			// If the HTTP response code is successful, update the contact.
+			if (response.getStatusCode() >= 200 && response.getStatusCode() <= 299) {
+				try {
+					Contact cont = [SELECT Id, DummyJSON_Last_Updated__c FROM Contact WHERE Id = :contactId];
+					cont.DummyJSON_Last_Updated__c = DateTime.now();
+					Database.update(cont);
+				} catch (DmlException e) {
+					System.debug('Failed to update contact after POST callout: ' + e.getMessage());
+				}	
+			} else {
+				System.debug('Unexpected status code: ' + response.getStatusCode());
+			}
+		} catch (CalloutException e) {
+			System.debug('Callout failed: ' + e.getMessage());
+		} catch (Exception e) {
+			System.debug('Unexpected error in callout: ' + e.getMessage());
+		}
+		
 	}
 
 	/*
@@ -151,13 +182,38 @@ public with sharing class DummyJSONCallout {
 	@TestVisible // Allows test class to see this method. Since it is private, it would not be visible otherwise.
 	private static String generateDummyJsonUserPayload(String contactId) {
 		// Query the contact to get the field values to generate the JSON payload.
+		Contact cont = [SELECT Id, FirstName, LastName, Email, Phone FROM Contact WHERE Id = :contactId];
 
 		// Create a map of the field values.
-
+		Map<String, Object> jsonMap = new Map<String, Object>();
+		jsonMap.put('salesforceId', cont.Id);
+		if (!String.isBlank(cont.FirstName)) {
+			jsonMap.put('firstName', cont.FirstName);
+		} else {
+			jsonMap.put('firstName', 'unknown');
+		}
+		if (!String.isBlank(cont.LastName)) {
+			jsonMap.put('lastName', cont.LastName);
+		} else {
+			jsonMap.put('lastName', 'unknown');
+		}
+		if (!String.isBlank(cont.Email)) {
+			jsonMap.put('email', cont.Email);
+		} else {
+			jsonMap.put('email', 'unknown@unknown.com');
+		}
+		if (cont.Phone != null) {
+			jsonMap.put('phone', cont.Phone);
+		} else {
+			jsonMap.put('phone', '555-555-5555');
+		}
+		
 		// Serialize the map into a JSON string.
+		String jsonPayload = JSON.serialize(jsonMap);
+		System.debug('Payload being sent to url: ' + jsonPayload);
 		// Make sure to check that required contacts fields have a value. Default the value to unknown if it does not exists.
 		// Integration data can change over time. It is a best practice to add safeguards/validation to ensure the integration does not break.
 
-		return null;
+		return jsonPayload;
 	}
 }
