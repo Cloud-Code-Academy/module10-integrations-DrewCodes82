@@ -16,13 +16,51 @@
  * 
  * Optional Challenge: Use a trigger handler class to implement the trigger logic.
  */
-trigger ContactTrigger on Contact(before insert) {
+trigger ContactTrigger on Contact(before insert, after insert, after update) {
+	
+	// BEFORE INSERT: 
+	if (Trigger.isBefore && Trigger.isInsert) {
 	// When a contact is inserted
-	// if DummyJSON_Id__c is null, generate a random number between 0 and 100 and set this as the contact's DummyJSON_Id__c value
+		for (Contact cont : Trigger.new) {
+			// if DummyJSON_Id__c is null, generate a random number between 0 and 100 and set this as the contact's DummyJSON_Id__c value
+			if (String.isBlank(cont.DummyJSON_Id__c)) {
+				cont.DummyJSON_Id__c = String.valueOf(Integer.valueOf(Math.round(Math.random() * 100)));
+			}
+		}
+	}
 
-	//When a contact is inserted
-	// if DummyJSON_Id__c is less than or equal to 100, call the getDummyJSONUserFromId API
+	// AFTER INSERT: 
+	if (Trigger.isAfter && Trigger.isInsert) {
+		for (Contact cont : Trigger.new) {
+			// if DummyJSON_Id__c is less than or equal to 100, call the getDummyJSONUserFromId API
+			if (String.isBlank(cont.DummyJSON_Id__c)) {
+				System.debug('Skipping callout for Contact ' + cont.Id + ' due to missing DummyJSON_Id__c');
+			} else {
+				Integer dummyId = Integer.valueOf(cont.DummyJSON_Id__c);
+				if (dummyId <= 100) {
+					DummyJSONCallout.getDummyJSONUserFromId(cont.DummyJSON_Id__c);
+				}
+			}
+		}
+		
+	}
 
-	//When a contact is updated
-	// if DummyJSON_Id__c is greater than 100, call the postCreateDummyJSONUser API
+	// AFTER UPDATE: 
+	if (Trigger.isAfter && Trigger.isUpdate) {
+		if (System.isFuture()) {
+			return; // prevents recursion
+		} 
+		for (Contact cont : Trigger.new) {
+			// if DummyJSON_Id__c is greater than 100, call the postCreateDummyJSONUser API
+			Contact old = Trigger.oldMap.get(cont.Id);
+			if (!String.isBlank(cont.DummyJSON_Id__c)) {
+				Integer dummyId = Integer.valueOf(cont.DummyJSON_Id__c);
+				Integer oldDummyId = String.isBlank(old.DummyJSON_Id__c) ? null : Integer.valueOf(old.DummyJSON_Id__c);
+				if (dummyId > 100 && dummyId != oldDummyId) {
+					DummyJSONCallout.postCreateDummyJSONUser(cont.Id);
+				}
+			}
+		}
+	}
+	
 }
